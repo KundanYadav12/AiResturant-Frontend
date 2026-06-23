@@ -1,3 +1,13 @@
+// import React, { useState, useEffect } from 'react';
+// import { useParams, Link } from 'react-router-dom';
+// import ChatBox from '../components/ChatBox';
+// import OrderSummary from '../components/OrderSummary';
+// import { orderAPI } from '../services/api';
+// import socketHelper from '../services/socket';
+
+// const CustomerOrder = () => {
+//   const { tableToken } = useParams();
+  
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import ChatBox from '../components/ChatBox';
@@ -6,7 +16,7 @@ import { orderAPI } from '../services/api';
 import socketHelper from '../services/socket';
 
 const CustomerOrder = () => {
-  const { restaurantId, tableId } = useParams();
+  const { tableToken } = useParams();
   
   // Table & Restaurant details
   const [table, setTable] = useState(null);
@@ -23,9 +33,45 @@ const CustomerOrder = () => {
   const [placedOrder, setPlacedOrder] = useState(null);
   const [socketConnected, setSocketConnected] = useState(false);
 
+  // Table Request status tracking
+  const [requestLoading, setRequestLoading] = useState(null); // 'WAITER', 'WATER', 'BILL'
+  const [activeRequestMsg, setActiveRequestMsg] = useState(null);
+
+  // Voice Assistant states & utilities
+  const [voiceOutputEnabled, setVoiceOutputEnabled] = useState(false);
+
+  const speakText = (text, force = false) => {
+    if ((voiceOutputEnabled || force) && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+      let cleanedText = text
+        .replace(/₹/g, 'Rupees ')
+        .replace(/\n/g, ' ')
+        .replace(/[*#`]/g, '');
+      const utterance = new SpeechSynthesisUtterance(cleanedText);
+      utterance.lang = 'en-IN';
+      window.speechSynthesis.speak(utterance);
+    }
+  };
+
+  const handleToggleVoice = () => {
+    const newVal = !voiceOutputEnabled;
+    setVoiceOutputEnabled(newVal);
+    if (newVal) {
+      speakText("Voice assistant activated", true);
+    } else {
+      handleStopSpeaking();
+    }
+  };
+
+  const handleStopSpeaking = () => {
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
+  };
+
   useEffect(() => {
     fetchTableDetails();
-  }, [tableId]);
+  }, [tableToken]);
 
   useEffect(() => {
     if (placedOrder) {
@@ -49,6 +95,9 @@ const CustomerOrder = () => {
           } catch (e) {
             console.log('Audio autoplay prevented:', e);
           }
+
+          // Speak status update
+          speakText(`Your order status is now ${updatedOrder.status.toLowerCase()}`);
         }
       });
 
@@ -63,20 +112,20 @@ const CustomerOrder = () => {
     try {
       setLoading(true);
       setError(null);
-      const data = await orderAPI.getTableDetails(tableId);
+      const data = await orderAPI.getTableDetails(tableToken);
       setTable(data);
       
       // Seed welcome message
       setMessages([
         {
           sender: 'bot',
-          text: `Welcome to ${data.restaurant_name}! \nI am your AI Server. Scan your table and tell me what you would like to order. For example: "1 Paneer Tikka with extra cheese, and 2 Cokes".`,
+          text: `Welcome to ${data.restaurant_name}! \nI am your AI Server. Tap the microphone or type to order. E.g. "1 Paneer Tikka with extra cheese, and 2 Cokes". \n\nYou can also ask me menu, dietary, FAQ or allergen questions!`,
           timestamp: new Date()
         }
       ]);
     } catch (err) {
       console.error(err);
-      setError('Invalid QR code or QR code is expired. Please verify with a restaurant manager.');
+      setError(err.response?.data?.error || 'Invalid QR code or QR code is expired. Please verify with a restaurant manager.');
     } finally {
       setLoading(false);
     }
@@ -95,9 +144,9 @@ const CustomerOrder = () => {
         content: m.text
       }));
 
-      // 2. Call backend Claude AI order parser
+      // 2. Call backend Claude AI order parser using table token
       const response = await orderAPI.sendAIChat(
-        restaurantId,
+        tableToken,
         text,
         cart,
         chatHistory
@@ -105,20 +154,50 @@ const CustomerOrder = () => {
 
       // 3. Update cart and bot response
       setCart(response.items || []);
+      const assistantText = response.assistantResponse;
       setMessages(prev => [...prev, {
         sender: 'bot',
-        text: response.assistantResponse,
+        text: assistantText,
         timestamp: new Date()
       }]);
+
+      // Speak assistant response
+      speakText(assistantText);
     } catch (err) {
       console.error('AI chat error:', err);
+      const errorFallback = 'Sorry, I hit a snag parsing that message. Could you try phrasing it differently or tell me manually?';
       setMessages(prev => [...prev, {
         sender: 'bot',
-        text: 'Sorry, I hit a snag parsing that message. Could you try phrasing it differently or tell me manually?',
+        text: errorFallback,
         timestamp: new Date()
       }]);
+      speakText(errorFallback);
     } finally {
       setIsTyping(false);
+    }
+  };
+
+  const handleTableRequest = async (type) => {
+    try {
+      setRequestLoading(type);
+      setActiveRequestMsg(null);
+      await orderAPI.requestTableAssistance(tableToken, type);
+      
+      let msg = '';
+      if (type === 'WAITER') msg = '🔔 Service Waiter has been called to your table.';
+      if (type === 'WATER') msg = '💧 Water has been requested for your table.';
+      if (type === 'BILL') msg = '🧾 Bill/Check has been requested.';
+      
+      setActiveRequestMsg(msg);
+      // Auto clear request message after 5 seconds
+      setTimeout(() => {
+        setActiveRequestMsg(null);
+      }, 6000);
+    } catch (err) {
+      console.error('Table request error:', err);
+      alert('Failed to send request. Please ask restaurant staff directly.');
+    } finally {
+      setRequestLoading(null);
     }
   };
 
@@ -144,8 +223,7 @@ const CustomerOrder = () => {
       const totalAmount = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
       
       const orderData = {
-        restaurantId,
-        tableId,
+        tableToken,
         totalAmount,
         notes,
         items: cart
@@ -191,7 +269,7 @@ const CustomerOrder = () => {
         <div className="spinner-border text-primary mb-3" style={{ width: '3rem', height: '3rem' }} role="status">
           <span className="visually-hidden">Loading...</span>
         </div>
-        <p className="fw-semibold text-secondary animate-pulse">Initializing Digital AI Menu...</p>
+        <p className="fw-semibold text-secondary">Initializing Digital AI Menu...</p>
       </div>
     );
   }
@@ -214,14 +292,59 @@ const CustomerOrder = () => {
     const isDelivered = placedOrder.status === 'DELIVERED';
 
     return (
-      <div className="min-vh-100 bg-light-subtle py-5">
+      <div className="min-vh-100 bg-light py-5">
         <div className="container" style={{ maxWidth: '650px' }}>
           <div className="card shadow-lg border-0 p-4" style={{ borderRadius: '20px' }}>
             <div className="text-center mb-4">
               <span className="badge bg-secondary mb-2">Order #{placedOrder.id}</span>
               <h3 className="fw-bold text-dark mb-1">{table.restaurant_name}</h3>
-              <p className="text-muted fw-semibold">Table {table.table_number}</p>
+              <p className="text-muted fw-semibold mb-2">Table {table.table_number}</p>
+              <button 
+                className={`btn btn-sm ${voiceOutputEnabled ? 'btn-primary animate-pulse' : 'btn-outline-secondary'} px-3 py-1.5 rounded-pill fw-semibold d-inline-flex align-items-center gap-1.5`}
+                onClick={handleToggleVoice}
+                title={voiceOutputEnabled ? "Mute AI Voice" : "Unmute AI Voice"}
+              >
+                <i className={`bi ${voiceOutputEnabled ? 'bi-volume-up-fill' : 'bi-volume-mute-fill'}`}></i>
+                <span>AI Voice: {voiceOutputEnabled ? 'ON' : 'OFF'}</span>
+              </button>
             </div>
+
+            {/* Quick Actions in Tracking Screen */}
+            <div className="row g-2 mb-4">
+              <div className="col-4">
+                <button 
+                  className="btn btn-outline-danger w-100 py-2 rounded-3 text-nowrap fw-semibold btn-sm"
+                  disabled={requestLoading !== null}
+                  onClick={() => handleTableRequest('WAITER')}
+                >
+                  {requestLoading === 'WAITER' ? 'Calling...' : '🔔 Call Waiter'}
+                </button>
+              </div>
+              <div className="col-4">
+                <button 
+                  className="btn btn-outline-info w-100 py-2 rounded-3 text-nowrap fw-semibold btn-sm"
+                  disabled={requestLoading !== null}
+                  onClick={() => handleTableRequest('WATER')}
+                >
+                  {requestLoading === 'WATER' ? 'Requesting...' : '💧 Water'}
+                </button>
+              </div>
+              <div className="col-4">
+                <button 
+                  className="btn btn-outline-success w-100 py-2 rounded-3 text-nowrap fw-semibold btn-sm"
+                  disabled={requestLoading !== null}
+                  onClick={() => handleTableRequest('BILL')}
+                >
+                  {requestLoading === 'BILL' ? 'Requesting...' : '🧾 Bill'}
+                </button>
+              </div>
+            </div>
+
+            {activeRequestMsg && (
+              <div className="alert alert-success text-center py-2 mb-4" role="alert">
+                <small className="fw-bold">{activeRequestMsg}</small>
+              </div>
+            )}
 
             {/* Status Tracker visualizer */}
             <div className="card border-0 bg-light p-4 mb-4 rounded-3 text-center">
@@ -302,20 +425,68 @@ const CustomerOrder = () => {
 
   // --- AI Chat Ordering Screen ---
   return (
-    <div className="min-vh-100 bg-light py-4 py-md-5">
+    <div className="min-vh-100 bg-light py-4">
       <div className="container">
         {/* Restaurant Header banner */}
-        <div className="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom">
+        <div className="d-flex justify-content-between align-items-center mb-3 pb-3 border-bottom">
           <div>
             <h2 className="fw-extrabold text-dark mb-1">{table?.restaurant_name}</h2>
             <p className="text-muted mb-0 fw-semibold">
               <i className="bi bi-geo-alt me-1 text-primary"></i> Dining Table: <span className="text-primary">{table?.table_number}</span>
             </p>
           </div>
-          <Link to="/login" className="btn btn-sm btn-outline-secondary px-3 py-1.5 rounded-pill fw-semibold">
-            Staff Portal
-          </Link>
+          <div className="d-flex align-items-center gap-2">
+            <button 
+              className={`btn btn-sm ${voiceOutputEnabled ? 'btn-primary' : 'btn-outline-secondary'} px-3 py-1.5 rounded-pill fw-semibold d-flex align-items-center gap-1.5`}
+              onClick={handleToggleVoice}
+              title={voiceOutputEnabled ? "Mute AI Voice" : "Unmute AI Voice"}
+            >
+              <i className={`bi ${voiceOutputEnabled ? 'bi-volume-up-fill' : 'bi-volume-mute-fill'}`}></i>
+              <span>AI Voice: {voiceOutputEnabled ? 'ON' : 'OFF'}</span>
+            </button>
+            <Link to="/login" className="btn btn-sm btn-outline-secondary px-3 py-1.5 rounded-pill fw-semibold">
+              Staff Portal
+            </Link>
+          </div>
         </div>
+
+        {/* Quick Assistance Actions Row */}
+        <div className="row g-2 mb-4">
+          <div className="col-4">
+            <button 
+              className="btn btn-danger w-100 py-2.5 rounded-3 fw-bold shadow-sm"
+              disabled={requestLoading !== null}
+              onClick={() => handleTableRequest('WAITER')}
+            >
+              {requestLoading === 'WAITER' ? 'Calling...' : '🔔 Call Waiter'}
+            </button>
+          </div>
+          <div className="col-4">
+            <button 
+              className="btn btn-info text-white w-100 py-2.5 rounded-3 fw-bold shadow-sm"
+              disabled={requestLoading === null}
+              onClick={() => handleTableRequest('WATER')}
+            >
+              {requestLoading === 'WATER' ? 'Requesting...' : '💧 Water'}
+            </button>
+          </div>
+          <div className="col-4">
+            <button 
+              className="btn btn-success w-100 py-2.5 rounded-3 fw-bold shadow-sm"
+              disabled={requestLoading !== null}
+              onClick={() => handleTableRequest('BILL')}
+            >
+              {requestLoading === 'BILL' ? 'Requesting...' : '🧾 Request Bill'}
+            </button>
+          </div>
+        </div>
+
+        {activeRequestMsg && (
+          <div className="alert alert-success alert-dismissible fade show text-center py-2 mb-4" role="alert">
+            <i className="bi bi-check-circle-fill me-2"></i><strong>{activeRequestMsg}</strong>
+            <button type="button" className="btn-close py-2" onClick={() => setActiveRequestMsg(null)}></button>
+          </div>
+        )}
 
         {/* Dynamic Dual columns layout (Chat & Order summary) */}
         <div className="row g-4">
@@ -325,6 +496,9 @@ const CustomerOrder = () => {
               isTyping={isTyping}
               onSendMessage={handleSendMessage}
               disabled={isSubmitting}
+              onStopSpeaking={handleStopSpeaking}
+              voiceOutputEnabled={voiceOutputEnabled}
+              onToggleVoice={handleToggleVoice}
             />
           </div>
           <div className="col-lg-5">
