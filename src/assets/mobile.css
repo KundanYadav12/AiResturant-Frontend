@@ -1,0 +1,66 @@
+/* src/assets/mobile.css */
+/* Mobile‑first enhancements for AI Restaurant */
+
+/* Header bar – ensure title and controls are aligned */
+.header-bar {
+  background: linear-gradient(135deg, hsl(190, 70%, 45%), hsl(210, 60%, 50%));
+  color: #fff;
+  padding: 0.75rem 1rem;
+  border-radius: 0.75rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.header-bar .title {
+  font-family: 'Inter', sans-serif;
+  font-size: 1.2rem;
+  font-weight: 700;
+  margin: 0;
+}
+
+.header-bar .controls {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+/* Uniform quick‑action button height */
+.quick-actions .btn {
+  height: 44px; /* consistent across all three */
+  font-size: 0.9rem;
+  border-radius: 0.5rem;
+}
+
+.quick-actions .btn:focus {
+  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+}
+
+/* Table info hierarchy – larger, primary colour */
+.table-info {
+  font-size: 1rem;
+  font-weight: 600;
+  color: hsl(210, 30%, 30%);
+}
+
+/* Sticky confirm button for mobile */
+.sticky-confirm {
+  position: sticky;
+  bottom: 0;
+  background: #fff;
+  padding: 0.75rem 1rem;
+  box-shadow: 0 -2px 6px rgba(0,0,0,0.08);
+  z-index: 10;
+}
+
+/* Voice toggle – larger clickable area */
+.voice-toggle {
+  font-size: 0.95rem;
+}
+
+@media (min-width: 576px) {
+  .header-bar { flex-direction: row; justify-content: space-between; }
+  .quick-actions .btn { height: auto; }
+}

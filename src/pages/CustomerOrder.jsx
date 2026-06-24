@@ -1,13 +1,3 @@
-// import React, { useState, useEffect } from 'react';
-// import { useParams, Link } from 'react-router-dom';
-// import ChatBox from '../components/ChatBox';
-// import OrderSummary from '../components/OrderSummary';
-// import { orderAPI } from '../services/api';
-// import socketHelper from '../services/socket';
-
-// const CustomerOrder = () => {
-//   const { tableToken } = useParams();
-  
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import ChatBox from '../components/ChatBox';
@@ -17,7 +7,7 @@ import socketHelper from '../services/socket';
 
 const CustomerOrder = () => {
   const { tableToken } = useParams();
-  
+
   // Table & Restaurant details
   const [table, setTable] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -57,7 +47,7 @@ const CustomerOrder = () => {
     const newVal = !voiceOutputEnabled;
     setVoiceOutputEnabled(newVal);
     if (newVal) {
-      speakText("Voice assistant activated", true);
+      speakText('Voice assistant activated', true);
     } else {
       handleStopSpeaking();
     }
@@ -75,9 +65,8 @@ const CustomerOrder = () => {
 
   useEffect(() => {
     if (placedOrder) {
-      // Initiate Socket Connection to track order status updates in real-time
       const socket = socketHelper.initiateSocketConnection();
-      
+
       socket.on('connect', () => {
         setSocketConnected(true);
         socketHelper.joinOrderRoom(placedOrder.id);
@@ -86,8 +75,6 @@ const CustomerOrder = () => {
       socketHelper.subscribeToOrderStatus((err, updatedOrder) => {
         if (updatedOrder && updatedOrder.id === placedOrder.id) {
           setPlacedOrder(updatedOrder);
-          
-          // Trigger browser notification sound if status updates
           try {
             const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2568/2568-84.wav');
             audio.volume = 0.5;
@@ -95,8 +82,6 @@ const CustomerOrder = () => {
           } catch (e) {
             console.log('Audio autoplay prevented:', e);
           }
-
-          // Speak status update
           speakText(`Your order status is now ${updatedOrder.status.toLowerCase()}`);
         }
       });
@@ -114,8 +99,6 @@ const CustomerOrder = () => {
       setError(null);
       const data = await orderAPI.getTableDetails(tableToken);
       setTable(data);
-      
-      // Seed welcome message
       setMessages([
         {
           sender: 'bot',
@@ -132,45 +115,25 @@ const CustomerOrder = () => {
   };
 
   const handleSendMessage = async (text) => {
-    // 1. Add user message to state
     const userMsg = { sender: 'user', text, timestamp: new Date() };
     setMessages(prev => [...prev, userMsg]);
     setIsTyping(true);
 
     try {
-      // Create chat history to pass to Claude (excluding the current one)
       const chatHistory = messages.map(m => ({
         role: m.sender === 'user' ? 'user' : 'assistant',
         content: m.text
       }));
 
-      // 2. Call backend Claude AI order parser using table token
-      const response = await orderAPI.sendAIChat(
-        tableToken,
-        text,
-        cart,
-        chatHistory
-      );
-
-      // 3. Update cart and bot response
+      const response = await orderAPI.sendAIChat(tableToken, text, cart, chatHistory);
       setCart(response.items || []);
       const assistantText = response.assistantResponse;
-      setMessages(prev => [...prev, {
-        sender: 'bot',
-        text: assistantText,
-        timestamp: new Date()
-      }]);
-
-      // Speak assistant response
+      setMessages(prev => [...prev, { sender: 'bot', text: assistantText, timestamp: new Date() }]);
       speakText(assistantText);
     } catch (err) {
       console.error('AI chat error:', err);
       const errorFallback = 'Sorry, I hit a snag parsing that message. Could you try phrasing it differently or tell me manually?';
-      setMessages(prev => [...prev, {
-        sender: 'bot',
-        text: errorFallback,
-        timestamp: new Date()
-      }]);
+      setMessages(prev => [...prev, { sender: 'bot', text: errorFallback, timestamp: new Date() }]);
       speakText(errorFallback);
     } finally {
       setIsTyping(false);
@@ -182,17 +145,12 @@ const CustomerOrder = () => {
       setRequestLoading(type);
       setActiveRequestMsg(null);
       await orderAPI.requestTableAssistance(tableToken, type);
-      
       let msg = '';
-      if (type === 'WAITER') msg = '🔔 Service Waiter has been called to your table.';
+      if (type === 'WAITER') msg = '🔔 Waiter has been called to your table.';
       if (type === 'WATER') msg = '💧 Water has been requested for your table.';
-      if (type === 'BILL') msg = '🧾 Bill/Check has been requested.';
-      
+      if (type === 'BILL') msg = '🧾 Bill has been requested.';
       setActiveRequestMsg(msg);
-      // Auto clear request message after 5 seconds
-      setTimeout(() => {
-        setActiveRequestMsg(null);
-      }, 6000);
+      setTimeout(() => setActiveRequestMsg(null), 6000);
     } catch (err) {
       console.error('Table request error:', err);
       alert('Failed to send request. Please ask restaurant staff directly.');
@@ -202,11 +160,8 @@ const CustomerOrder = () => {
   };
 
   const handleUpdateQty = (menuItemId, newQty) => {
-    if (newQty <= 0) {
-      handleRemoveItem(menuItemId);
-      return;
-    }
-    setCart(prev => prev.map(item => 
+    if (newQty <= 0) { handleRemoveItem(menuItemId); return; }
+    setCart(prev => prev.map(item =>
       item.menu_item_id === menuItemId ? { ...item, quantity: newQty } : item
     ));
   };
@@ -217,19 +172,10 @@ const CustomerOrder = () => {
 
   const handleSubmitOrder = async (notes) => {
     if (cart.length === 0) return;
-    
     try {
       setIsSubmitting(true);
       const totalAmount = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
-      
-      const orderData = {
-        tableToken,
-        totalAmount,
-        notes,
-        items: cart
-      };
-
-      const result = await orderAPI.createOrder(orderData);
+      const result = await orderAPI.createOrder({ tableToken, totalAmount, notes, items: cart });
       setPlacedOrder(result.order);
     } catch (err) {
       console.error('Submit order error:', err);
@@ -254,15 +200,16 @@ const CustomerOrder = () => {
   const getStatusText = (status) => {
     switch (status) {
       case 'PENDING': return 'Waiting for Restaurant to Accept...';
-      case 'ACCEPTED': return 'Order Accepted!';
-      case 'PREPARING': return 'Chef is cooking your meal...';
-      case 'READY': return 'Your order is ready! Waiter is bringing it to your table...';
-      case 'DELIVERED': return 'Order Served! Enjoy your food!';
+      case 'ACCEPTED': return 'Order Accepted! 🎉';
+      case 'PREPARING': return 'Chef is cooking your meal... 👨‍🍳';
+      case 'READY': return 'Your order is ready! Waiter is bringing it to you... 🛎️';
+      case 'DELIVERED': return 'Order Served! Enjoy your food! 🍽️';
       case 'REJECTED': return 'Order rejected. Please check with waiter.';
       default: return '';
     }
   };
 
+  // ─── Loading screen ───────────────────────────────────────────────────────
   if (loading) {
     return (
       <div className="d-flex flex-column align-items-center justify-content-center min-vh-100 bg-light">
@@ -274,6 +221,7 @@ const CustomerOrder = () => {
     );
   }
 
+  // ─── Error screen ─────────────────────────────────────────────────────────
   if (error) {
     return (
       <div className="container min-vh-100 d-flex align-items-center justify-content-center">
@@ -286,58 +234,49 @@ const CustomerOrder = () => {
     );
   }
 
-  // --- Placed Order Tracking Screen ---
+  // ─── Order Tracking Screen ────────────────────────────────────────────────
   if (placedOrder) {
     const isRejected = placedOrder.status === 'REJECTED';
     const isDelivered = placedOrder.status === 'DELIVERED';
 
     return (
-      <div className="min-vh-100 bg-light py-5">
+      <div className="min-vh-100 bg-light py-4">
         <div className="container" style={{ maxWidth: '650px' }}>
           <div className="card shadow-lg border-0 p-4" style={{ borderRadius: '20px' }}>
+            {/* Tracking Header */}
             <div className="text-center mb-4">
               <span className="badge bg-secondary mb-2">Order #{placedOrder.id}</span>
               <h3 className="fw-bold text-dark mb-1">{table.restaurant_name}</h3>
-              <p className="text-muted fw-semibold mb-2">Table {table.table_number}</p>
-              <button 
-                className={`btn btn-sm ${voiceOutputEnabled ? 'btn-primary animate-pulse' : 'btn-outline-secondary'} px-3 py-1.5 rounded-pill fw-semibold d-inline-flex align-items-center gap-1.5`}
+              <p className="text-primary fw-bold mb-3" style={{ fontSize: '1rem' }}>
+                <i className="bi bi-geo-alt-fill me-1"></i>Table {table.table_number}
+              </p>
+              <button
+                className={`btn ${voiceOutputEnabled ? 'btn-primary' : 'btn-outline-secondary'} rounded-pill fw-semibold d-inline-flex align-items-center gap-2`}
+                style={{ minWidth: '140px', height: '40px', fontSize: '0.9rem' }}
                 onClick={handleToggleVoice}
-                title={voiceOutputEnabled ? "Mute AI Voice" : "Unmute AI Voice"}
               >
                 <i className={`bi ${voiceOutputEnabled ? 'bi-volume-up-fill' : 'bi-volume-mute-fill'}`}></i>
-                <span>AI Voice: {voiceOutputEnabled ? 'ON' : 'OFF'}</span>
+                AI Voice: {voiceOutputEnabled ? 'ON' : 'OFF'}
               </button>
             </div>
 
-            {/* Quick Actions in Tracking Screen */}
-            <div className="row g-2 mb-4">
-              <div className="col-4">
-                <button 
-                  className="btn btn-outline-danger w-100 py-2 rounded-3 text-nowrap fw-semibold btn-sm"
+            {/* Quick Actions */}
+            <div className="d-flex gap-2 mb-4">
+              {[
+                { type: 'WAITER', label: 'Call Waiter', icon: '🔔', loadingLabel: 'Calling...', cls: 'btn-outline-danger' },
+                { type: 'WATER',  label: 'Water',       icon: '💧', loadingLabel: 'Requesting...', cls: 'btn-outline-info' },
+                { type: 'BILL',   label: 'Bill',        icon: '🧾', loadingLabel: 'Requesting...', cls: 'btn-outline-success' },
+              ].map(({ type, label, icon, loadingLabel, cls }) => (
+                <button
+                  key={type}
+                  className={`btn ${cls} fw-semibold flex-fill`}
+                  style={{ height: '44px', fontSize: '0.82rem', whiteSpace: 'nowrap' }}
                   disabled={requestLoading !== null}
-                  onClick={() => handleTableRequest('WAITER')}
+                  onClick={() => handleTableRequest(type)}
                 >
-                  {requestLoading === 'WAITER' ? 'Calling...' : '🔔 Call Waiter'}
+                  {requestLoading === type ? loadingLabel : `${icon} ${label}`}
                 </button>
-              </div>
-              <div className="col-4">
-                <button 
-                  className="btn btn-outline-info w-100 py-2 rounded-3 text-nowrap fw-semibold btn-sm"
-                  disabled={requestLoading !== null}
-                  onClick={() => handleTableRequest('WATER')}
-                >
-                  {requestLoading === 'WATER' ? 'Requesting...' : '💧 Water'}
-                </button>
-              </div>
-              <div className="col-4">
-                <button 
-                  className="btn btn-outline-success w-100 py-2 rounded-3 text-nowrap fw-semibold btn-sm"
-                  disabled={requestLoading !== null}
-                  onClick={() => handleTableRequest('BILL')}
-                >
-                  {requestLoading === 'BILL' ? 'Requesting...' : '🧾 Bill'}
-                </button>
-              </div>
+              ))}
             </div>
 
             {activeRequestMsg && (
@@ -346,26 +285,22 @@ const CustomerOrder = () => {
               </div>
             )}
 
-            {/* Status Tracker visualizer */}
+            {/* Status Tracker */}
             <div className="card border-0 bg-light p-4 mb-4 rounded-3 text-center">
               <h5 className={`fw-bold ${isRejected ? 'text-danger' : 'text-primary'} mb-3`}>
-                {isRejected ? 'ORDER REJECTED' : placedOrder.status}
+                {isRejected ? '❌ ORDER REJECTED' : placedOrder.status}
               </h5>
-              
               <div className="progress mb-3 border" style={{ height: '10px', borderRadius: '10px' }}>
-                <div 
+                <div
                   className={`progress-bar progress-bar-striped progress-bar-animated ${isRejected ? 'bg-danger' : isDelivered ? 'bg-secondary' : 'bg-success'}`}
-                  role="progressbar" 
+                  role="progressbar"
                   style={{ width: `${getProgressPercentage(placedOrder.status)}%` }}
                 ></div>
               </div>
-              
-              <p className="small mb-0 text-secondary fw-semibold">
-                {getStatusText(placedOrder.status)}
-              </p>
+              <p className="small mb-0 text-secondary fw-semibold">{getStatusText(placedOrder.status)}</p>
             </div>
 
-            {/* Placed Order Summary details */}
+            {/* Order Details */}
             <h6 className="fw-bold text-dark border-bottom pb-2 mb-3">Order Details</h6>
             <div className="mb-4">
               {placedOrder.items && placedOrder.items.map((item, idx) => (
@@ -377,9 +312,7 @@ const CustomerOrder = () => {
                     {item.customizations && item.customizations.length > 0 && (
                       <div className="mt-1 d-flex flex-wrap gap-1">
                         {item.customizations.map((c, cIdx) => (
-                          <span key={cIdx} className="badge bg-warning-subtle text-warning-emphasis rounded-pill" style={{ fontSize: '0.7rem' }}>
-                            {c}
-                          </span>
+                          <span key={cIdx} className="badge bg-warning-subtle text-warning-emphasis rounded-pill" style={{ fontSize: '0.7rem' }}>{c}</span>
                         ))}
                       </div>
                     )}
@@ -393,7 +326,7 @@ const CustomerOrder = () => {
 
             {placedOrder.notes && (
               <div className="bg-warning-subtle border border-warning-subtle text-warning-emphasis p-3 rounded-3 mb-4">
-                <small className="d-block fw-bold mb-1"><i className="bi bi-chat-left-text-fill me-1"></i> Kitchen Instructions</small>
+                <small className="d-block fw-bold mb-1"><i className="bi bi-chat-left-text-fill me-1"></i>Kitchen Instructions</small>
                 <span className="small font-monospace">{placedOrder.notes}</span>
               </div>
             )}
@@ -404,7 +337,7 @@ const CustomerOrder = () => {
             </div>
 
             <div className="text-center">
-              <button 
+              <button
                 className="btn btn-outline-primary px-4 py-2 rounded-pill fw-bold"
                 onClick={() => setPlacedOrder(null)}
                 disabled={placedOrder.status !== 'DELIVERED' && placedOrder.status !== 'REJECTED'}
@@ -413,7 +346,7 @@ const CustomerOrder = () => {
               </button>
               {(placedOrder.status !== 'DELIVERED' && placedOrder.status !== 'REJECTED') && (
                 <small className="d-block text-muted mt-2">
-                  <i className="bi bi-info-circle me-1"></i> You can order additional items or chat with the AI waiter once this order is served.
+                  <i className="bi bi-info-circle me-1"></i>You can order additional items once this order is served.
                 </small>
               )}
             </div>
@@ -423,74 +356,91 @@ const CustomerOrder = () => {
     );
   }
 
-  // --- AI Chat Ordering Screen ---
+  // ─── AI Chat Ordering Screen ──────────────────────────────────────────────
   return (
-    <div className="min-vh-100 bg-light py-4">
-      <div className="container">
-        {/* Restaurant Header banner */}
-        <div className="d-flex justify-content-between align-items-center mb-3 pb-3 border-bottom">
-          <div>
-            <h2 className="fw-extrabold text-dark mb-1">{table?.restaurant_name}</h2>
-            <p className="text-muted mb-0 fw-semibold">
-              <i className="bi bi-geo-alt me-1 text-primary"></i> Dining Table: <span className="text-primary">{table?.table_number}</span>
-            </p>
+    <div className="min-vh-100 bg-light" style={{ paddingBottom: '80px' }}>
+      {/* ── Top Header ── */}
+      <div
+        className="sticky-top bg-white shadow-sm px-3 py-2"
+        style={{ zIndex: 100, borderBottom: '2px solid #e9ecef' }}
+      >
+        {/* Row 1 – Restaurant name + table */}
+        <div className="d-flex align-items-center justify-content-between">
+          <div style={{ minWidth: 0 }}>
+            <h1
+              className="fw-bold text-dark mb-0 text-truncate"
+              style={{ fontSize: 'clamp(1rem, 4vw, 1.4rem)', lineHeight: 1.2 }}
+            >
+              {table?.restaurant_name}
+            </h1>
+            <div className="d-flex align-items-center gap-1 mt-1">
+              <i className="bi bi-geo-alt-fill text-primary" style={{ fontSize: '0.75rem' }}></i>
+              <span
+                className="fw-semibold text-primary"
+                style={{ fontSize: 'clamp(0.72rem, 2.5vw, 0.9rem)' }}
+              >
+                Dining Table: {table?.table_number}
+              </span>
+            </div>
           </div>
-          <div className="d-flex align-items-center gap-2">
-            <button 
-              className={`btn btn-sm ${voiceOutputEnabled ? 'btn-primary' : 'btn-outline-secondary'} px-3 py-1.5 rounded-pill fw-semibold d-flex align-items-center gap-1.5`}
+
+          {/* Row 1 – controls: Voice toggle + Staff Portal */}
+          <div className="d-flex align-items-center gap-2 flex-shrink-0 ms-2">
+            <button
+              className={`btn ${voiceOutputEnabled ? 'btn-primary' : 'btn-outline-secondary'} fw-semibold d-flex align-items-center gap-1`}
+              style={{ height: '38px', minWidth: '100px', fontSize: '0.8rem', borderRadius: '20px' }}
               onClick={handleToggleVoice}
-              title={voiceOutputEnabled ? "Mute AI Voice" : "Unmute AI Voice"}
+              title={voiceOutputEnabled ? 'Mute AI Voice' : 'Enable AI Voice'}
             >
               <i className={`bi ${voiceOutputEnabled ? 'bi-volume-up-fill' : 'bi-volume-mute-fill'}`}></i>
-              <span>AI Voice: {voiceOutputEnabled ? 'ON' : 'OFF'}</span>
+              <span>AI {voiceOutputEnabled ? 'ON' : 'OFF'}</span>
             </button>
-            <Link to="/login" className="btn btn-sm btn-outline-secondary px-3 py-1.5 rounded-pill fw-semibold">
-              Staff Portal
+
+            <Link
+              to="/login"
+              className="btn btn-outline-dark fw-semibold d-flex align-items-center gap-1"
+              style={{ height: '38px', fontSize: '0.8rem', borderRadius: '20px' }}
+            >
+              <i className="bi bi-person-badge"></i>
+              <span className="d-none d-sm-inline">Staff</span>
             </Link>
           </div>
         </div>
+      </div>
 
-        {/* Quick Assistance Actions Row */}
-        <div className="row g-2 mb-4">
-          <div className="col-4">
-            <button 
-              className="btn btn-danger w-100 py-2.5 rounded-3 fw-bold shadow-sm"
+      <div className="container pt-3">
+        {/* ── Quick Action Buttons ── */}
+        <div className="d-flex gap-2 mb-3">
+          {[
+            { type: 'WAITER', label: 'Call Waiter', icon: '🔔', loadingLabel: 'Calling...', cls: 'btn-danger' },
+            { type: 'WATER',  label: 'Water',       icon: '💧', loadingLabel: 'Requesting...', cls: 'btn-info text-white' },
+            { type: 'BILL',   label: 'Request Bill', icon: '🧾', loadingLabel: 'Requesting...', cls: 'btn-success' },
+          ].map(({ type, label, icon, loadingLabel, cls }) => (
+            <button
+              key={type}
+              className={`btn ${cls} fw-bold flex-fill`}
+              style={{ height: '46px', fontSize: 'clamp(0.72rem, 2.5vw, 0.9rem)', whiteSpace: 'nowrap' }}
               disabled={requestLoading !== null}
-              onClick={() => handleTableRequest('WAITER')}
+              onClick={() => handleTableRequest(type)}
             >
-              {requestLoading === 'WAITER' ? 'Calling...' : '🔔 Call Waiter'}
+              {requestLoading === type ? loadingLabel : `${icon} ${label}`}
             </button>
-          </div>
-          <div className="col-4">
-            <button 
-              className="btn btn-info text-white w-100 py-2.5 rounded-3 fw-bold shadow-sm"
-              disabled={requestLoading === null}
-              onClick={() => handleTableRequest('WATER')}
-            >
-              {requestLoading === 'WATER' ? 'Requesting...' : '💧 Water'}
-            </button>
-          </div>
-          <div className="col-4">
-            <button 
-              className="btn btn-success w-100 py-2.5 rounded-3 fw-bold shadow-sm"
-              disabled={requestLoading !== null}
-              onClick={() => handleTableRequest('BILL')}
-            >
-              {requestLoading === 'BILL' ? 'Requesting...' : '🧾 Request Bill'}
-            </button>
-          </div>
+          ))}
         </div>
 
+        {/* ── Request Feedback Alert ── */}
         {activeRequestMsg && (
-          <div className="alert alert-success alert-dismissible fade show text-center py-2 mb-4" role="alert">
-            <i className="bi bi-check-circle-fill me-2"></i><strong>{activeRequestMsg}</strong>
+          <div className="alert alert-success alert-dismissible fade show text-center py-2 mb-3" role="alert">
+            <i className="bi bi-check-circle-fill me-2"></i>
+            <strong>{activeRequestMsg}</strong>
             <button type="button" className="btn-close py-2" onClick={() => setActiveRequestMsg(null)}></button>
           </div>
         )}
 
-        {/* Dynamic Dual columns layout (Chat & Order summary) */}
-        <div className="row g-4">
-          <div className="col-lg-7">
+        {/* ── Dual Column Layout ── */}
+        <div className="row g-3">
+          {/* Chat column */}
+          <div className="col-12 col-lg-6">
             <ChatBox
               messages={messages}
               isTyping={isTyping}
@@ -501,7 +451,9 @@ const CustomerOrder = () => {
               onToggleVoice={handleToggleVoice}
             />
           </div>
-          <div className="col-lg-5">
+
+          {/* Order Summary column */}
+          <div className="col-12 col-lg-6">
             <OrderSummary
               cart={cart}
               onUpdateQty={handleUpdateQty}
@@ -513,6 +465,54 @@ const CustomerOrder = () => {
           </div>
         </div>
       </div>
+
+      {/* ── Sticky Confirm CTA (mobile only, shown when cart has items) ── */}
+      {cart.length > 0 && (
+        <div
+          className="d-lg-none fixed-bottom bg-white px-3 py-2"
+          style={{
+            boxShadow: '0 -4px 20px rgba(0,0,0,0.12)',
+            borderTop: '2px solid #e9ecef',
+            zIndex: 200,
+          }}
+        >
+          <div className="d-flex align-items-center justify-content-between gap-2">
+            <div className="fw-bold text-dark" style={{ fontSize: '0.85rem' }}>
+              <span className="badge bg-primary rounded-pill me-1">
+                {cart.reduce((s, i) => s + i.quantity, 0)}
+              </span>
+              items · <span className="text-primary">₹{cart.reduce((s, i) => s + i.price * i.quantity, 0).toFixed(0)}</span>
+            </div>
+            <button
+              className="btn btn-primary fw-bold d-flex align-items-center gap-2 flex-fill"
+              style={{ height: '48px', borderRadius: '14px', fontSize: '0.95rem' }}
+              onClick={() => {
+                const el = document.getElementById('order-summary-section');
+                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }}
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? (
+                <>
+                  <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                  Placing...
+                </>
+              ) : (
+                <>
+                  <i className="bi bi-cart-check-fill"></i>
+                  View & Confirm Order
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      )}
+
+      <style>{`
+        @media (max-width: 991px) {
+          .min-vh-100 { padding-bottom: 80px; }
+        }
+      `}</style>
     </div>
   );
 };

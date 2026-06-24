@@ -12,7 +12,7 @@ const OrderSummary = ({ cart, onUpdateQty, onRemoveItem, onSubmitOrder, isSubmit
   };
 
   return (
-    <div className="card shadow-lg border-0" style={{ borderRadius: '20px', overflow: 'hidden' }}>
+    <div id="order-summary-section" className="card shadow-lg border-0" style={{ borderRadius: '20px', overflow: 'hidden' }}>
       <div className="card-header bg-gradient bg-dark text-white p-3">
         <h6 className="mb-0 fw-bold d-flex justify-content-between align-items-center">
           <span><i className="bi bi-cart3 me-2"></i> Order Summary</span>
