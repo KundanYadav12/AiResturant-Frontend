@@ -1,9 +1,10 @@
- 
-
-
 import { io } from 'socket.io-client';
+import { SOCKET_URL } from './api';
 
-const SOCKET_URL = 'http://localhost:5000';
+// ─── Socket.IO connection ─────────────────────────────────────────────────
+// URL is read from .env via the centralized api.js export.
+// To change the backend server, update VITE_SOCKET_URL in .env — nothing else.
+// ──────────────────────────────────────────────────────────────────────────
 
 let socket;
 
@@ -12,7 +13,7 @@ export const initiateSocketConnection = () => {
     transports: ['websocket', 'polling'],
     withCredentials: true
   });
-  console.log('Connecting socket...');
+  console.log('Connecting socket to', SOCKET_URL);
   return socket;
 };
 
@@ -63,7 +64,7 @@ export const unsubscribeFromOrderStatus = () => {
 
 export const subscribeToTableRequests = (cb) => {
   if (!socket) return;
-  
+
   socket.on('WAITER_REQUEST', (req) => {
     console.log('Real-time: Received WAITER_REQUEST');
     cb(null, { ...req, type: 'WAITER' });
@@ -100,7 +101,7 @@ export default {
   joinRestaurantRoom,
   joinOrderRoom,
   subscribeToNewOrders,
-  unsubscribeFromNewOrders: unsubscribeFromNewOrders,
+  unsubscribeFromNewOrders,
   subscribeToOrderStatus,
   unsubscribeFromOrderStatus,
   subscribeToTableRequests,

@@ -1,0 +1,9 @@
+/*  Redirect ALL routes to index.html so React Router handles them  */
+/* :splat catches everything after the domain */
+/*  200 = serve index.html with 200 OK (not a 301 redirect)         */
+/order/*    /index.html   200
+/login      /index.html   200
+/manager    /index.html   200
+/admin      /index.html   200
+/super-admin /index.html  200
+/*          /index.html   200

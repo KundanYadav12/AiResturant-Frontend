@@ -387,7 +387,7 @@ const MenuManagement = ({ restaurantId }) => {
                         <td>
                           {item.image ? (
                             <img
-                              src={`http://localhost:5000${item.image}`}
+                              src={`https://aiwaitercall.netlify.app/${item.image}`}
                               alt={item.name}
                               className="rounded-3"
                               style={{ width: '50px', height: '50px', objectFit: 'cover' }}

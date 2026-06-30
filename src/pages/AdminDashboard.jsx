@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import MenuManagement from '../components/MenuManagement';
-import { dashboardAPI, authAPI, menuAPI } from '../services/api';
+import { dashboardAPI, authAPI, menuAPI, FRONTEND_URL } from '../services/api';
 
 const AdminDashboard = () => {
   const [activeTab, setActiveTab] = useState('analytics'); // 'analytics', 'menu', 'customizations', 'ingredients', 'faqs', 'knowledge', 'tables', 'subscription'
@@ -432,25 +432,25 @@ const AdminDashboard = () => {
                   <div className="col-6 col-md-3">
                     <div className="card border-0 shadow-sm p-3 bg-white" style={{ borderRadius: '16px' }}>
                       <small className="text-muted d-block fw-semibold" style={{ fontSize: '0.75rem' }}>TODAY'S ORDERS</small>
-                      <h3 className="fw-bold mb-0 font-monospace text-primary">{analytics.today.orders}</h3>
+                      <h3 className="fw-bold mb-0 font-monospace text-primary">{analytics?.today?.orders ?? 0}</h3>
                     </div>
                   </div>
                   <div className="col-6 col-md-3">
                     <div className="card border-0 shadow-sm p-3 bg-white" style={{ borderRadius: '16px' }}>
                       <small className="text-muted d-block fw-semibold" style={{ fontSize: '0.75rem' }}>TODAY'S REVENUE</small>
-                      <h3 className="fw-bold mb-0 font-monospace text-success">₹{analytics.today.revenue.toFixed(2)}</h3>
+                      <h3 className="fw-bold mb-0 font-monospace text-success">₹{(analytics?.today?.revenue ?? 0).toFixed(2)}</h3>
                     </div>
                   </div>
                   <div className="col-6 col-md-3">
                     <div className="card border-0 shadow-sm p-3 bg-white" style={{ borderRadius: '16px' }}>
                       <small className="text-muted d-block fw-semibold" style={{ fontSize: '0.75rem' }}>WEEKLY SALES</small>
-                      <h3 className="fw-bold mb-0 font-monospace text-info">₹{analytics.weekly.revenue.toFixed(2)}</h3>
+                      <h3 className="fw-bold mb-0 font-monospace text-info">₹{(analytics?.weekly?.revenue ?? 0).toFixed(2)}</h3>
                     </div>
                   </div>
                   <div className="col-6 col-md-3">
                     <div className="card border-0 shadow-sm p-3 bg-white" style={{ borderRadius: '16px' }}>
                       <small className="text-muted d-block fw-semibold" style={{ fontSize: '0.75rem' }}>MONTHLY SALES</small>
-                      <h3 className="fw-bold mb-0 font-monospace text-dark">₹{analytics.monthly.revenue.toFixed(2)}</h3>
+                      <h3 className="fw-bold mb-0 font-monospace text-dark">₹{(analytics?.monthly?.revenue ?? 0).toFixed(2)}</h3>
                     </div>
                   </div>
                 </div>
@@ -469,8 +469,8 @@ const AdminDashboard = () => {
                             </tr>
                           </thead>
                           <tbody>
-                            {analytics.topItems.length === 0 ? (
-                              <tr><td colSpan="3" className="text-center py-4 text-muted">No sales logged.</td></tr>
+                            {(!analytics?.topItems || analytics.topItems.length === 0) ? (
+                              <tr><td colSpan="3" className="text-center text-muted py-3 small">No orders yet today</td></tr>
                             ) : (
                               analytics.topItems.map((item, idx) => (
                                 <tr key={idx}>
@@ -499,8 +499,8 @@ const AdminDashboard = () => {
                             </tr>
                           </thead>
                           <tbody>
-                            {analytics.topTables.length === 0 ? (
-                              <tr><td colSpan="3" className="text-center py-4 text-muted">No table orders served yet.</td></tr>
+                            {(!analytics?.topTables || analytics.topTables.length === 0) ? (
+                              <tr><td colSpan="3" className="text-center text-muted py-3 small">No table data available</td></tr>
                             ) : (
                               analytics.topTables.map((t, idx) => (
                                 <tr key={idx}>
@@ -883,10 +883,11 @@ const AdminDashboard = () => {
                     <div className="col-md-3">
                       <button
                         type="submit"
-                        className="btn btn-primary w-100 py-2.5 fw-bold"
+                        className="btn btn-primary w-100 fw-bold"
+                        style={{ height: '42px' }}
                         disabled={tableSubmitLoading}
                       >
-                        {tableSubmitLoading ? 'Saving...' : 'Add Table'}
+                        {tableSubmitLoading ? 'Saving...' : '+ Add Table'}
                       </button>
                     </div>
                   </form>
@@ -900,37 +901,157 @@ const AdminDashboard = () => {
                     </div>
                   ) : (
                     tables.map((table) => {
-                      const absoluteQrUrl = `${window.location.origin}/order/${table.table_token}`;
-                      const qrCodeImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(absoluteQrUrl)}`;
+                      // Use FRONTEND_URL from .env — change once, applies everywhere
+                      const orderUrl = `${FRONTEND_URL}/order/${table.table_token}`;
+                      const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(orderUrl)}&bgcolor=ffffff&color=000000&margin=10`;
+
+                      // Download QR as a styled PNG card using canvas
+                      const handleDownloadQR = async () => {
+                        try {
+                          // 1. Load QR image from external API
+                          const img = new Image();
+                          img.crossOrigin = 'anonymous';
+                          img.src = qrApiUrl;
+
+                          await new Promise((resolve, reject) => {
+                            img.onload = resolve;
+                            img.onerror = reject;
+                          });
+
+                          // 2. Draw styled card on canvas
+                          const canvas = document.createElement('canvas');
+                          const W = 400, H = 520;
+                          canvas.width = W;
+                          canvas.height = H;
+                          const ctx = canvas.getContext('2d');
+
+                          // Background
+                          ctx.fillStyle = '#ffffff';
+                          ctx.fillRect(0, 0, W, H);
+
+                          // Top gradient header bar
+                          const grad = ctx.createLinearGradient(0, 0, W, 80);
+                          grad.addColorStop(0, '#0d6efd');
+                          grad.addColorStop(1, '#6610f2');
+                          ctx.fillStyle = grad;
+                          ctx.beginPath();
+                          ctx.roundRect(0, 0, W, 90, [0, 0, 0, 0]);
+                          ctx.fill();
+
+                          // "AI Waiter" heading
+                          ctx.fillStyle = '#ffffff';
+                          ctx.font = 'bold 32px Arial, sans-serif';
+                          ctx.textAlign = 'center';
+                          ctx.fillText('🤖 AI Waiter', W / 2, 52);
+
+                          // Restaurant name (if available)
+                          ctx.font = '15px Arial, sans-serif';
+                          ctx.fillStyle = 'rgba(255,255,255,0.85)';
+                          ctx.fillText(restaurantName || 'Restaurant', W / 2, 78);
+
+                          // QR code image
+                          const qrX = (W - 260) / 2;
+                          ctx.drawImage(img, qrX, 110, 260, 260);
+
+                          // Divider
+                          ctx.strokeStyle = '#e9ecef';
+                          ctx.lineWidth = 1.5;
+                          ctx.beginPath();
+                          ctx.moveTo(40, 385);
+                          ctx.lineTo(W - 40, 385);
+                          ctx.stroke();
+
+                          // Table label
+                          ctx.fillStyle = '#6c757d';
+                          ctx.font = '14px Arial, sans-serif';
+                          ctx.fillText('DINING TABLE', W / 2, 415);
+
+                          // Table number — big & bold
+                          ctx.fillStyle = '#0d6efd';
+                          ctx.font = 'bold 30px Arial, sans-serif';
+                          ctx.fillText(table.table_number, W / 2, 455);
+
+                          // Footer hint
+                          ctx.fillStyle = '#adb5bd';
+                          ctx.font = '12px Arial, sans-serif';
+                          ctx.fillText('Scan to order · Powered by AI Waiter', W / 2, 500);
+
+                          // 3. Trigger download
+                          const link = document.createElement('a');
+                          link.download = `AI-Waiter-QR-${table.table_number.replace(/\s+/g, '-')}.png`;
+                          link.href = canvas.toDataURL('image/png');
+                          link.click();
+                        } catch (err) {
+                          console.error('QR download failed:', err);
+                          // Fallback: download plain QR image
+                          const link = document.createElement('a');
+                          link.download = `QR-${table.table_number}.png`;
+                          link.href = qrApiUrl;
+                          link.target = '_blank';
+                          link.click();
+                        }
+                      };
 
                       return (
                         <div key={table.id} className="col-6 col-sm-4 col-md-3">
-                          <div className="card border-0 shadow-sm p-3 bg-white text-center h-100 d-flex flex-column align-items-center justify-content-between" style={{ borderRadius: '16px' }}>
-                            <div className="fw-bold text-dark mb-2">{table.table_number}</div>
-                            
-                            <div className="bg-light p-2 rounded border mb-3">
-                              <img 
-                                src={qrCodeImageUrl} 
-                                alt={`QR Code for Table ${table.table_number}`} 
+                          <div
+                            className="card border-0 shadow-sm bg-white text-center h-100 d-flex flex-column align-items-center"
+                            style={{ borderRadius: '16px', overflow: 'hidden' }}
+                          >
+                            {/* Card header */}
+                            <div
+                              className="w-100 py-2 px-3 text-white fw-bold"
+                              style={{
+                                background: 'linear-gradient(135deg, #0d6efd, #6610f2)',
+                                fontSize: '0.85rem',
+                                letterSpacing: '0.3px'
+                              }}
+                            >
+                              🤖 AI Waiter
+                            </div>
+
+                            {/* QR image */}
+                            <div className="bg-white p-2 my-2">
+                              <img
+                                src={qrApiUrl}
+                                alt={`QR Code for Table ${table.table_number}`}
                                 className="img-fluid"
                                 style={{ width: '130px', height: '130px', objectFit: 'contain' }}
                               />
                             </div>
 
-                            <div className="d-flex flex-column gap-2 w-100">
-                              <a 
-                                href={`/order/${table.table_token}`} 
-                                target="_blank" 
-                                rel="noopener noreferrer"
-                                className="btn btn-sm btn-outline-primary rounded-pill fw-semibold py-1.5"
+                            {/* Table number */}
+                            <div className="fw-bold text-primary mb-1" style={{ fontSize: '1rem' }}>
+                              {table.table_number}
+                            </div>
+                            <div className="text-muted mb-3" style={{ fontSize: '0.72rem' }}>
+                              Scan to order
+                            </div>
+
+                            {/* Action buttons */}
+                            <div className="d-flex flex-column gap-2 w-100 px-3 pb-3 mt-auto">
+                              <button
+                                className="btn btn-sm btn-primary rounded-pill fw-semibold"
+                                style={{ height: '34px', fontSize: '0.8rem' }}
+                                onClick={handleDownloadQR}
                               >
-                                <i className="bi bi-box-arrow-up-right me-1"></i> Scan Table QR
+                                <i className="bi bi-download me-1"></i> Download QR
+                              </button>
+                              <a
+                                href={orderUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="btn btn-sm btn-outline-primary rounded-pill fw-semibold"
+                                style={{ height: '34px', fontSize: '0.8rem' }}
+                              >
+                                <i className="bi bi-box-arrow-up-right me-1"></i> Open Link
                               </a>
                               <button
-                                className="btn btn-sm btn-outline-danger rounded-pill fw-semibold py-1.5"
+                                className="btn btn-sm btn-outline-danger rounded-pill fw-semibold"
+                                style={{ height: '34px', fontSize: '0.8rem' }}
                                 onClick={() => handleDeleteTable(table.id)}
                               >
-                                <i className="bi bi-trash me-1"></i> Remove Table
+                                <i className="bi bi-trash me-1"></i> Remove
                               </button>
                             </div>
                           </div>
@@ -941,6 +1062,7 @@ const AdminDashboard = () => {
                 </div>
               </div>
             )}
+
 
             {/* 8. Subscription Plan */}
             {activeTab === 'subscription' && restaurantDetails && (

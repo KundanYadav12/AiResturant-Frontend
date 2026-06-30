@@ -1,7 +1,19 @@
 import axios from 'axios';
 
-const API_BASE_URL = 'http://localhost:5000/api';
+// ─── Central Configuration ────────────────────────────────────────────────────
+// All URLs come from .env (VITE_ prefix exposes them to the browser via Vite).
+// To switch server: update .env — no code change needed anywhere else.
+// ─────────────────────────────────────────────────────────────────────────────
+export const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
 
+export const SOCKET_URL =
+  import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000';
+
+export const FRONTEND_URL =
+  import.meta.env.VITE_FRONTEND_URL || window.location.origin;
+
+// ─── Axios instance ───────────────────────────────────────────────────────────
 const api = axios.create({
   baseURL: API_BASE_URL,
   headers: {
@@ -9,7 +21,7 @@ const api = axios.create({
   },
 });
 
-// Request interceptor to add authorization token
+// Attach JWT token to every request automatically
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
@@ -18,11 +30,10 @@ api.interceptors.request.use(
     }
     return config;
   },
-  (error) => {
-    return Promise.reject(error);
-  }
+  (error) => Promise.reject(error)
 );
 
+// ─── Auth API ─────────────────────────────────────────────────────────────────
 export const authAPI = {
   login: async (email, password) => {
     const response = await api.post('/auth/login', { email, password });
@@ -52,8 +63,9 @@ export const authAPI = {
   },
 };
 
+// ─── Menu API ─────────────────────────────────────────────────────────────────
 export const menuAPI = {
-  // Public Menu Token-based APIs
+  // Public Token-based APIs (customer ordering)
   getCategoriesByToken: async (tableToken) => {
     const response = await api.get(`/menu/tables/token/${tableToken}/categories`);
     return response.data;
@@ -63,13 +75,15 @@ export const menuAPI = {
     return response.data;
   },
 
-  // Owner/Manager APIs (Using Auth Context)
+  // Owner / Manager APIs
   getCategories: async (restaurantId) => {
     const response = await api.get(`/menu/restaurants/${restaurantId}/categories`);
     return response.data;
   },
   getMenuItems: async (restaurantId, includeInactive = false) => {
-    const response = await api.get(`/menu/restaurants/${restaurantId}/items?includeInactive=${includeInactive}`);
+    const response = await api.get(
+      `/menu/restaurants/${restaurantId}/items?includeInactive=${includeInactive}`
+    );
     return response.data;
   },
   createCategory: async (name) => {
@@ -86,17 +100,13 @@ export const menuAPI = {
   },
   createMenuItem: async (formData) => {
     const response = await api.post('/menu/items', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
+      headers: { 'Content-Type': 'multipart/form-data' },
     });
     return response.data;
   },
   updateMenuItem: async (id, formData) => {
     const response = await api.put(`/menu/items/${id}`, formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
+      headers: { 'Content-Type': 'multipart/form-data' },
     });
     return response.data;
   },
@@ -105,7 +115,7 @@ export const menuAPI = {
     return response.data;
   },
 
-  // Ingredients and Allergens Management
+  // Ingredients & Allergens
   getIngredients: async () => {
     const response = await api.get('/menu/ingredients');
     return response.data;
@@ -127,7 +137,7 @@ export const menuAPI = {
     return response.data;
   },
 
-  // Customizations Management
+  // Customizations
   getCustomizations: async (itemId) => {
     const response = await api.get(`/menu/items/${itemId}/customizations`);
     return response.data;
@@ -141,7 +151,7 @@ export const menuAPI = {
     return response.data;
   },
 
-  // FAQ Management
+  // FAQs
   getFAQs: async () => {
     const response = await api.get('/menu/faqs');
     return response.data;
@@ -159,7 +169,7 @@ export const menuAPI = {
     return response.data;
   },
 
-  // General Text Knowledge Base
+  // General Knowledge Base
   getGeneralKnowledge: async () => {
     const response = await api.get('/menu/knowledge');
     return response.data;
@@ -170,6 +180,7 @@ export const menuAPI = {
   },
 };
 
+// ─── Order API ────────────────────────────────────────────────────────────────
 export const orderAPI = {
   createOrder: async (orderData) => {
     const response = await api.post('/orders', orderData);
@@ -189,7 +200,10 @@ export const orderAPI = {
     return response.data;
   },
   requestTableAssistance: async (tableToken, requestType) => {
-    const response = await api.post(`/orders/tables/token/${tableToken}/request`, { requestType });
+    const response = await api.post(
+      `/orders/tables/token/${tableToken}/request`,
+      { requestType }
+    );
     return response.data;
   },
   getOrderStatus: async (orderId) => {
@@ -198,7 +212,11 @@ export const orderAPI = {
   },
   getOrders: async () => {
     const response = await api.get('/orders');
-    return response.data;
+    // Backend may return { orders: [...] } OR a plain array — handle both safely
+    const data = response.data;
+    if (Array.isArray(data)) return data;
+    if (data && Array.isArray(data.orders)) return data.orders;
+    return [];
   },
   updateOrderStatus: async (orderId, status) => {
     const response = await api.put(`/orders/${orderId}/status`, { status });
@@ -206,6 +224,7 @@ export const orderAPI = {
   },
 };
 
+// ─── Dashboard API ────────────────────────────────────────────────────────────
 export const dashboardAPI = {
   getAnalytics: async () => {
     const response = await api.get('/dashboard/analytics');
@@ -213,7 +232,11 @@ export const dashboardAPI = {
   },
   getTables: async () => {
     const response = await api.get('/dashboard/tables');
-    return response.data;
+    // Unwrap safely — backend may return { tables: [...] } or plain array
+    const data = response.data;
+    if (Array.isArray(data)) return data;
+    if (data && Array.isArray(data.tables)) return data.tables;
+    return [];
   },
   createTable: async (tableNumber) => {
     const response = await api.post('/dashboard/tables', { tableNumber });
@@ -227,19 +250,28 @@ export const dashboardAPI = {
   // Manager live requests & table status tracking
   getPendingRequests: async () => {
     const response = await api.get('/dashboard/requests');
-    return response.data;
+    const data = response.data;
+    if (Array.isArray(data)) return data;
+    if (data && Array.isArray(data.requests)) return data.requests;
+    return [];
   },
   completeRequest: async (requestId, tableId) => {
-    const response = await api.put(`/dashboard/requests/${requestId}/complete`, { tableId });
+    const response = await api.put(
+      `/dashboard/requests/${requestId}/complete`,
+      { tableId }
+    );
     return response.data;
   },
   getTableStatuses: async () => {
     const response = await api.get('/dashboard/tables/status');
-    return response.data;
+    const data = response.data;
+    if (Array.isArray(data)) return data;
+    if (data && Array.isArray(data.tables)) return data.tables;
+    return [];
   },
 };
 
-// Super Admin platform APIs
+// ─── SaaS / Super-Admin API ───────────────────────────────────────────────────
 export const saasAPI = {
   getStats: async () => {
     const response = await api.get('/saas/stats');
@@ -250,7 +282,10 @@ export const saasAPI = {
     return response.data;
   },
   updateSubscription: async (restaurantId, subscriptionData) => {
-    const response = await api.put(`/saas/restaurants/${restaurantId}/subscription`, subscriptionData);
+    const response = await api.put(
+      `/saas/restaurants/${restaurantId}/subscription`,
+      subscriptionData
+    );
     return response.data;
   },
   createRestaurant: async (restaurantData) => {
